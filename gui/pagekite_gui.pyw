@@ -259,7 +259,7 @@ class DemoTaskBarIcon(wx.TaskBarIcon):
     self.main.pagekite.restart()
 
   def OnTaskBarConsole(self, evt):
-    webbrowser.open_new('http://%s:%s/' % self.main.pk_httpd)
+    webbrowser.open_new(self.main.pagekite.pk.LoginUrl())
 
   def OnTaskBarClose(self, evt):
     self.main.Close(force=True)
