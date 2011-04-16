@@ -35,10 +35,12 @@
 #   - Enable remote mode, for controlling a system-wide pagekite.py?
 #
 import sys
+import socket
 import threading
 import time
 import webbrowser
 import wx
+import xmlrpclib
 
 import pagekite
 
@@ -54,8 +56,51 @@ URL_GETKITES = 'http://localhost:8000/signup/?do_login=1&more=kites&r=%s:%s/page
 URL_GETQUOTA = 'http://localhost:8000/signup/?do_login=1&more=bw'
 
 
-EVT_NEW_LOGLINE = wx.PyEventBinder(wx.NewEventType(), 0)
+##[ Wizard helpers, based on the wxPython demos ]##############################
 
+def makePageTitle(wizPage, title):
+  sizer = wx.BoxSizer(wx.VERTICAL)
+  title = wx.StaticText(wixPage, -1, title)
+  title.SetFont(wx.Font(18, wx.SWISS, wx.NORMAL, wx.BOLD))
+
+  wizPage.SetSizer(sizer)
+  sizer.Add(title, 0, wx.ALIGN_CENTER|wx.ALL, 5)
+  sizer.Add(wx.StaticLine(wizPage, -1), 0, wx.EXPAND|wx.ALL, 5)
+
+  return sizer
+
+class TitledWizardPage(wx.wizard.WizardPageSimple):
+  def __init__(self, parent, title):
+    wx.wizard.WizardPageSimple.__init__(self, parent)
+    self.sizer = makePageTitle(self, title)
+
+
+class AddKiteWizard(wx.Frame):
+  def __init__(self, parent, title):
+    wx.Frame.__init__(self, parent, -1, title, size=(350, 200))
+
+
+# Add kite wizard:
+#
+#  1. Kite name
+#
+#    - Choose name from list
+#    - Add button, refresh button
+#      
+#  2. Public port
+#
+#    - Choose public port from list (or any)
+#
+#  3. Server details:
+#
+#    - protocol: http / e2e https / ssh / vnc / other
+#    - server name: localhost
+#    - server port: 8080
+#
+
+
+
+##[ Taskbar icon and menu ]####################################################
 
 class DemoTaskBarIcon(wx.TaskBarIcon):
   TBMENU_LOGVIEW = wx.NewId()
@@ -125,7 +170,7 @@ class DemoTaskBarIcon(wx.TaskBarIcon):
     self.main.RefreshPageKiteInfo()
 
     menu.Append(self.TBMENU_LOGVIEW, "Display PageKite Log")
-    menu.Append(self.TBMENU_CONSOLE, "Open PageKite Control Panel")
+    menu.Append(self.TBMENU_CONSOLE, "Open PageKite Status")
     menu.AppendSeparator()
 
     if ENABLE_SHARING and self.main.pk_httpd:
@@ -265,6 +310,10 @@ class DemoTaskBarIcon(wx.TaskBarIcon):
     self.main.Close(force=True)
 
 
+##[ Log handling ]#############################################################
+
+EVT_NEW_LOGLINE = wx.PyEventBinder(wx.NewEventType(), 0)
+
 class LogLineEvent(wx.PyCommandEvent):
   def __init__(self, eventtype=EVT_NEW_LOGLINE.evtType[0], id=0):
     wx.PyCommandEvent.__init__(self, eventtype, id)
@@ -367,6 +416,11 @@ class MainFrame(wx.Frame):
   def CreateTaskBarIcon(self):
     self.tbicon = DemoTaskBarIcon(self)
 
+  def XMLRPC(self):
+    # FIXME: This is crazy.
+    pagekite.MonkeyProxyHack('pagekite.net', 443)
+    return self.pk_xmlrpc
+
   def RefreshPageKiteInfo(self):
     self.pk_kites = []
     self.pk_httpd = None
@@ -374,6 +428,7 @@ class MainFrame(wx.Frame):
     self.pk_service = None
     self.pk_sharing = False
     self.pk_mirroring = False
+    self.pk_xmlrpc = xmlrpclib.ServerProxy('https://pagekite.net/xmlrpc/')
 
     if self.pagekite and self.pagekite.pk:
       pk = self.pagekite.pk
@@ -416,14 +471,15 @@ class MainFrame(wx.Frame):
     self.log.WriteText(event.logline)
 
 
+##[ Main ]#####################################################################
+
 class PkApp(wx.App):
-  def __init__(self, redirect=False):
-    wx.App.__init__(self, redirect=redirect)
+  def OnInit(self):
     self.main = MainFrame(None)
     self.main.Hide()
     self.main.CreateTaskBarIcon()
     self.main.StartPageKite()
-
+    return True
 
 if __name__ == '__main__':
   app = PkApp(redirect=False)
