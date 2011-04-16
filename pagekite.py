@@ -4022,6 +4022,7 @@ class PageKite(object):
       LogError('Could not save to %s: %s' % (self.savefile, e))
 
   def FallDown(self, message, help=True, longhelp=False, noexit=False):
+    self.looping = False
     if self.conns and self.conns.auth: self.conns.auth.quit()
     if self.ui_httpd: self.ui_httpd.quit()
     if self.tunnel_manager: self.tunnel_manager.quit()
@@ -5126,9 +5127,15 @@ class PageKite(object):
       for conn in self.conns.conns: conn.Cleanup()
 
   def IsRunning(self):
-    if self.ui_httpd and self.ui_httpd.running: return True
-    if self.tunnel_manager and self.tunnel_manager.running: return True
-    if self.conns and self.conns.auth and self.conns.auth.running: return True
+    if self.ui_httpd and self.ui_httpd.running:
+      LogDebug('httpd still running...')
+      return True
+    if self.tunnel_manager and self.tunnel_manager.running:
+      LogDebug('tunnel manager still running...')
+      return True
+    if self.conns and self.conns.auth and self.conns.auth.running:
+      LogDebug('auth thread still running...')
+      return True
     return self.looping
 
 
