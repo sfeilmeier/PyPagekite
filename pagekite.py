@@ -552,6 +552,27 @@ def DisableSSLCompression():
     LogError('disableSSLCompression: Failed: %s' % e)
 
 
+def MonkeyProxyHack(hostname, port):
+  # This is a horrible hack!
+
+  old_connect = socket.socket.connect
+
+  def monkey_connect(self, address):
+    socket.socket.connect = old_connect
+    rv = old_connect(self, address)
+
+    sending = 'CONNECT %s:%s HTTP/1.0\r\n\r\n' % (hostname, port)
+    self.sendall(sending)
+    reply = self.recv(1024)
+    print '>> %s\n<< %s' % (sending, reply)
+
+    if not reply.startswith('HTTP/1.0 200'):
+      raise socket.error('HTTP CONNECT failed')
+    return rv
+
+  socket.socket.connect = monkey_connect
+
+
 # Different Python 2.x versions complain about deprecation depending on
 # where we pull these from.
 try:
