@@ -40,6 +40,7 @@ import threading
 import time
 import webbrowser
 import wx
+import wx.wizard
 import xmlrpclib
 
 import pagekite
