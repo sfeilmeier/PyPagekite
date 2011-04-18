@@ -23,9 +23,11 @@ URL_GETKITES = ('http://localhost:8000/signup/?do_login=1&more=kites'
                 '&r=%s:%s/pagekite/new_kite/')
 URL_GETQUOTA = ('http://localhost:8000/signup/?do_login=1&more=bw')
 
-ICON_FILE_ACTIVE  = 'icons-127/pk-active.png'
-ICON_FILE_TRAFFIC = 'icons-127/pk-traffic.png'
-ICON_FILE_IDLE    = 'icons-127/pk-idle.png'
+ICON_DIR_WINDOWS = 'icons-16'
+ICON_DIR_DEFAULT = 'icons-127'
+ICON_FILE_ACTIVE  = 'pk-active.png'
+ICON_FILE_TRAFFIC = 'pk-traffic.png'
+ICON_FILE_IDLE    = 'pk-idle.png'
 
 
 class PageKiteThread(threading.Thread):
@@ -123,11 +125,17 @@ class PageKiteStatusIcon(gtk.StatusIcon):
     self.pkThread = pkThread
     self.manager = gtk.UIManager()
 
+
     self.create_menu()
     self.set_tooltip('PageKite')
 
+    self.min_log_ll = 0
     self.icon_file = ICON_FILE_IDLE
-    self.set_from_file(self.icon_file)
+    if os.getenv('USERPROFILE'):
+      self.icon_dir = ICON_DIR_WINDOWS
+    else:
+      self.icon_dir = ICON_DIR_DEFAULT
+    self.set_from_file(os.path.join(self.icon_dir, self.icon_file))
 
     self.connect('activate', self.on_activate)
     self.connect('popup-menu', self.on_popup_menu)
@@ -181,13 +189,10 @@ class PageKiteStatusIcon(gtk.StatusIcon):
       self.icon_file = ICON_FILE_IDLE
       self.set_tooltip('PageKite (idle)')
     else:
-      min_ts = '%x' % (time.time()-2)
       traffic = False
-      for line in [l for l in pagekite.LOG if l['ts'] > min_ts]:
-        # FIXME: Make this a little smarter? Detect on-going transfers?
-        if 'FE' in line: traffic = True
-        if 'is' in line: traffic = True
-        if 'wrote' in line: traffic = True
+      for line in [l for l in pagekite.LOG if int(l['ll'], 16) > self.min_log_ll]:
+        traffic = ('proto' in line or 'uireq' in line or 'wrote' in line)
+      self.min_log_ll = max([int(l['ll'], 16) for l in pagekite.LOG])
 
       if traffic:
         self.icon_file = ICON_FILE_TRAFFIC
@@ -196,7 +201,8 @@ class PageKiteStatusIcon(gtk.StatusIcon):
         self.icon_file = ICON_FILE_ACTIVE
         self.set_tooltip('PageKite (active)')
 
-    if self.icon_file != old_if: self.set_from_file(self.icon_file)
+    if self.icon_file != old_if:
+      self.set_from_file(os.path.join(self.icon_dir, self.icon_file))
     return True
 
   def on_popup_menu(self, status, button, when):
