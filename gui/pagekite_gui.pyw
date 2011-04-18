@@ -51,10 +51,11 @@ ENABLE_SHARING = True
 SERVICE_DOMAINS = [
   '.pagekite.me', '.pagekite.net', '.pagekite.us', '.pagekite.info'
 ]
-URL_HOME     = 'https://pagekite.net/home/'
-URL_SIGNUP   = 'https://pagekite.net/signup/'
-URL_GETKITES = 'http://localhost:8000/signup/?do_login=1&more=kites&r=%s:%s/pagekite/new_kite/'
-URL_GETQUOTA = 'http://localhost:8000/signup/?do_login=1&more=bw'
+URL_HOME     = ('https://pagekite.net/home/')
+URL_SIGNUP   = ('https://pagekite.net/signup/')
+URL_GETKITES = ('http://localhost:8000/signup/?do_login=1&more=kites'
+                '&r=%s:%s/pagekite/new_kite/')
+URL_GETQUOTA = ('http://localhost:8000/signup/?do_login=1&more=bw')
 
 
 ##[ Wizard helpers, based on the wxPython demos ]##############################
