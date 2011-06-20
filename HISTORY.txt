@@ -1,6 +1,11 @@
 Version history - highlights
 ============================
 
+v0.3.22  ??
+-------
+   - Added broader support for HTTP CONNECT to backends (for ad-hoc TLS)
+
+
 v0.3.21  2011.05.26
 -------
    - More LoopBack problems and file-descriptor leak fixes.
