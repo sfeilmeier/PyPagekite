@@ -2578,7 +2578,7 @@ class UserConn(Selectable):
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
     if proto == 'probe':
-      protos = ['http', 'https', 'websocket', 'raw']
+      protos = ['http', 'https', 'websocket', 'raw', 'finger', 'fingerweb']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
@@ -2821,11 +2821,12 @@ class UnknownConn(MagicProtocolParser):
 
           if (cport in self.conns.config.server_raw_ports or
               VIRTUAL_PN in self.conns.config.server_raw_ports):
-            if (('raw'+sid1) in tunnels) or (('raw'+sid2) in tunnels):
-              (self.on_port, self.host) = (cport, chost)
-              self.parser = HttpParser()
-              self.Send(HTTP_ConnectOK())
-              return self.ProcessRaw(''.join(lines), self.host)
+            for raw in ('raw', 'finger'):
+              if ((raw+sid1) in tunnels) or ((raw+sid2) in tunnels):
+                (self.on_port, self.host) = (cport, chost)
+                self.parser = HttpParser()
+                self.Send(HTTP_ConnectOK())
+                return self.ProcessRaw(''.join(lines), self.host)
 
         except ValueError:
           pass
@@ -2943,6 +2944,39 @@ class RawConn(Selectable):
       self.Cleanup()
 
 
+class FingerConn(LineParser):
+  """This class is a finger connection."""
+
+  def __init__(self, fd, address, on_port, conns):
+    LineParser.__init__(self, fd, address, on_port)
+    self.conns = conns
+    self.conns.Add(self)
+
+  def ProcessLine(self, line, lines):
+    finger_user = line.strip()
+    if '+' in finger_user:
+      user, domain = finger_user.split('+', 1)
+    elif '@' in finger_user:
+      user, domain = finger_user.split('@', 1)
+    else:
+      return False
+
+    lines = [line] + lines
+    if domain and (UserConn.FrontEnd(self, self.address, 'finger', domain,
+                                     self.on_port, lines, self.conns) or
+                   UserConn.FrontEnd(self, self.address, 'fingerweb', domain,
+                                     self.on_port, lines, self.conns)):
+      self.Cleanup(close=False)
+      return True
+    else:
+      return False
+
+
+CONN_HANDLERS = {
+  '79': FingerConn,
+}
+
+
 class Listener(Selectable):
   """This class listens for incoming connections and accepts them."""
 
@@ -3053,7 +3087,8 @@ class PageKite(object):
     self.server_raw_ports = []
     self.server_portalias = {}
     self.server_aliasport = {}
-    self.server_protos = ['http', 'https', 'websocket', 'raw']
+    self.server_protos = ['http', 'https', 'websocket',
+                          'finger', 'fingerweb', 'raw']
 
     self.tls_default = None
     self.tls_endpoints = {}
@@ -3848,7 +3883,8 @@ class PageKite(object):
           Listener(self.server_host, port, conns)
         for port in self.server_raw_ports:
           if port != VIRTUAL_PN and port > 0:
-            Listener(self.server_host, port, conns, connclass=RawConn)
+            Listener(self.server_host, port, conns,
+                     connclass=CONN_HANDLERS.get(str(port), RawConn))
 
       # Start the UI thread
       if self.ui_sspec:
