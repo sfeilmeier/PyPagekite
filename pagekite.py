@@ -2109,11 +2109,12 @@ class Tunnel(ChunkParser):
       self.Cleanup()
       return None
 
-  def _RecvHttpHeaders(self):
+  def _RecvHttpHeaders(self, fd=None):
     data = ''
+    fd = fd or self.fd
     while not data.endswith('\r\n\r\n') and not data.endswith('\n\n'):
       try:
-        buf = self.fd.recv(4096)
+        buf = fd.recv(1)
       except:
         # This is sloppy, but the back-end will just connect somewhere else
         # instead, so laziness here should be fine.
@@ -2417,8 +2418,7 @@ class Tunnel(ChunkParser):
       LogError('Tunnel::ProcessChunk: Corrupt chunk: %s' % e)
       return False
 
-    conn = None
-    sid = None
+    proto = conn = sid = None
     try:
       sid = int(parse.Header('SID')[0])
       eof = parse.Header('EOF')
@@ -2462,6 +2462,7 @@ class Tunnel(ChunkParser):
           else:
             conn = UserConn.BackEnd(proto, host, sid, self, port,
                                     remote_ip=rIp, remote_port=rPort)
+
             if proto in ('http', 'websocket'):
               if not conn:
                 if not self.SendChunked('SID: %s\r\n\r\n%s' % (sid,
@@ -2472,6 +2473,16 @@ class Tunnel(ChunkParser):
                 req, rest = re.sub(r'(?mi)^x-forwarded-for', 'X-Old-Forwarded-For', data
                                    ).split('\n', 1) 
                 data = ''.join([req, '\nX-Forwarded-For: %s\r\n' % rIp, rest])
+
+            elif proto == 'fingerweb':
+              # Rewrite a finger request to HTTP.
+              firstline, rest = data.split('\n', 1)
+              data = ('GET /~%s/.plan HTTP/1.1\r\n'
+                      'X-Forwarded-For: %s\r\n'
+                      'Connection: close\r\n'
+                      'Host: %s\r\n\r\n%s'
+                     ) % (firstline.strip(), rIp, host, rest)
+
           if conn:
             self.users[sid] = conn
 
@@ -2479,9 +2490,16 @@ class Tunnel(ChunkParser):
         self.CloseStream(sid)
         if not self.SendStreamEof(sid): return False
       else:
-        if not conn.Send(data):
-          # FIXME
-          pass
+        if proto == 'fingerweb':
+          conn.fd.setblocking(1)
+          conn.Send(data, try_flush=True) or conn.Flush(wait=True)
+          self._RecvHttpHeaders(fd=conn.fd)
+          conn.fd.setblocking(0)
+        else:
+          if not conn.Send(data):
+            # FIXME
+            pass
+
         if len(conn.write_blocked) > 2*max(conn.write_speed, 50000):
           if conn.created < time.time()-3:
             if not self.SendThrottle(sid, conn.write_speed): return False
@@ -2961,7 +2979,7 @@ class FingerConn(LineParser):
     else:
       return False
 
-    lines = [line] + lines
+    lines = ['%s\r\n' % user] + lines
     if domain and (UserConn.FrontEnd(self, self.address, 'finger', domain,
                                      self.on_port, lines, self.conns) or
                    UserConn.FrontEnd(self, self.address, 'fingerweb', domain,
