@@ -140,7 +140,8 @@ Common Options:
  --tls_default=N        Default name to use for SSL, if SNI and tracking fail.
  --tls_endpoint=N:F     Terminate SSL/TLS for name N, using key/cert from F.
  --defaults             Set some reasonable default setings.
- --errorurl=U  -E U    URL to redirect to when back-ends are not found.
+ --errorurl=U  -E U     URL to redirect to when back-ends are not found.
+ --fingerpath=P         Path recipe for httpfinger.
  --settings             Dump the current settings to STDOUT, formatted as
                        an options file would be.
 
@@ -221,7 +222,7 @@ MAGIC_PATHS = (MAGIC_PATH, '/Beanstalk~Magic~Beans/0.2')
 OPT_FLAGS = 'o:S:H:P:X:L:ZI:fA:R:h:p:aD:U:NE:'
 OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nocrashreport',
             'optfile=', 'savefile=', 'reloadfile=',
-            'httpd=', 'pemfile=', 'httppass=', 'errorurl=',
+            'httpd=', 'pemfile=', 'httppass=', 'errorurl=', 'fingerpath=',
             'logfile=', 'daemonize', 'nodaemonize', 'runas=', 'pidfile=',
             'isfrontend', 'noisfrontend', 'settings', 'defaults', 'domain=',
             'authdomain=', 'authhelpurl=', 'register=', 'host=',
@@ -2474,14 +2475,21 @@ class Tunnel(ChunkParser):
                                    ).split('\n', 1) 
                 data = ''.join([req, '\nX-Forwarded-For: %s\r\n' % rIp, rest])
 
-            elif proto == 'fingerweb':
+            elif proto == 'httpfinger':
               # Rewrite a finger request to HTTP.
-              firstline, rest = data.split('\n', 1)
-              data = ('GET /~%s/.plan HTTP/1.1\r\n'
-                      'X-Forwarded-For: %s\r\n'
-                      'Connection: close\r\n'
-                      'Host: %s\r\n\r\n%s'
-                     ) % (firstline.strip(), rIp, host, rest)
+              try:
+                firstline, rest = data.split('\n', 1)
+                if '%s' in self.conns.config.finger_path:
+                  args =  (firstline.strip(), rIp, host, rest)
+                else:
+                  args =  (rIp, host, rest)
+                data = ('GET '+self.conns.config.finger_path+' HTTP/1.1\r\n'
+                        'X-Forwarded-For: %s\r\n'
+                        'Connection: close\r\n'
+                        'Host: %s\r\n\r\n%s') % args
+              except Exception, e:
+                self.LogError('Error formatting HTTP-Finger: %s' % e)
+                conn = None
 
           if conn:
             self.users[sid] = conn
@@ -2490,7 +2498,7 @@ class Tunnel(ChunkParser):
         self.CloseStream(sid)
         if not self.SendStreamEof(sid): return False
       else:
-        if proto == 'fingerweb':
+        if proto == 'httpfinger':
           conn.fd.setblocking(1)
           conn.Send(data, try_flush=True) or conn.Flush(wait=True)
           self._RecvHttpHeaders(fd=conn.fd)
@@ -2596,7 +2604,7 @@ class UserConn(Selectable):
     # then the just the proto. If the protocol is WebSocket and no tunnel is
     # found, look for a plain HTTP tunnel.
     if proto == 'probe':
-      protos = ['http', 'https', 'websocket', 'raw', 'finger', 'fingerweb']
+      protos = ['http', 'https', 'websocket', 'raw', 'finger', 'httpfinger']
       ports = conns.config.server_ports[:]
       ports.extend(conns.config.server_aliasport.keys())
       ports.extend([x for x in conns.config.server_raw_ports if x != VIRTUAL_PN])
@@ -2982,7 +2990,7 @@ class FingerConn(LineParser):
     lines = ['%s\r\n' % user] + lines
     if domain and (UserConn.FrontEnd(self, self.address, 'finger', domain,
                                      self.on_port, lines, self.conns) or
-                   UserConn.FrontEnd(self, self.address, 'fingerweb', domain,
+                   UserConn.FrontEnd(self, self.address, 'httpfinger', domain,
                                      self.on_port, lines, self.conns)):
       self.Cleanup(close=False)
       return True
@@ -3106,7 +3114,7 @@ class PageKite(object):
     self.server_portalias = {}
     self.server_aliasport = {}
     self.server_protos = ['http', 'https', 'websocket',
-                          'finger', 'fingerweb', 'raw']
+                          'finger', 'httpfinger', 'raw']
 
     self.tls_default = None
     self.tls_endpoints = {}
@@ -3127,6 +3135,7 @@ class PageKite(object):
     self.enable_sslzlib = False
     self.buffer_max = 1024 
     self.error_url = None
+    self.finger_path = '/~%s/.finger'
 
     self.tunnel_manager = None
     self.client_mode = 0
@@ -3229,6 +3238,7 @@ class PageKite(object):
       print '#backend=https:YOU.pagekite.me:localhost:443:SECRET'
       print '#backend=websocket:YOU.pagekite.me:localhost:8080:SECRET'
     print (self.error_url and ('errorurl=%s' % self.error_url) or '#errorurl=http://host/page/')
+    print (self.finger_path and ('fingerpath=%s' % self.finger_path) or '#finger_path=/~%s/.finger')
     print (self.servers_new_only and 'new' or '#new')
     print (self.require_all and 'all' or '#all')
     print (self.no_probes and 'noprobes' or '#noprobes')
@@ -3543,6 +3553,7 @@ class PageKite(object):
         self.servers_auto = (int(count), domain, int(port))
 
       elif opt in ('--errorurl', '-E'): self.error_url = arg
+      elif opt == '--fingerpath': self.finger_path = arg
       elif opt == '--backend':
         protos, domain, bhost, bport, secret = arg.split(':')
         for proto in protos.split(','): 
