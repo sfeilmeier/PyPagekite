@@ -3301,7 +3301,7 @@ class PageKite(object):
       print DOC
       print '*****'
     if message: print 'Error: %s' % message
-    if not noexit: sys.exit(1)
+    if not noexit: os._exit(1)
 
   def GetTlsEndpointCtx(self, domain):
     if domain in self.tls_endpoints: return self.tls_endpoints[domain][1]
@@ -3435,7 +3435,7 @@ class PageKite(object):
 
   def HelpAndExit(self):
     print DOC
-    sys.exit(0)
+    os._exit(0)
 
   def Configure(self, argv):
     opts, args = getopt.getopt(argv, OPT_FLAGS, OPT_ARGS) 
@@ -3603,7 +3603,7 @@ class PageKite(object):
 
       elif opt == '--settings':
         self.PrintSettings()
-        sys.exit(0)
+        os._exit(0)
 
       else:
         self.HelpAndExit()
@@ -4020,7 +4020,7 @@ def Main(pagekite, configure):
         return
 
     except SystemExit:
-      sys.exit(0)
+      os._exit(0)
 
     except Exception, msg:
       traceback.print_exc(file=sys.stderr)
@@ -4050,7 +4050,7 @@ def Main(pagekite, configure):
 def Configure(pk):
   if '--appver' in sys.argv:
     print '%s' % APPVER
-    sys.exit(0)
+    os._exit(0)
 
   if '--clean' not in sys.argv:
     if os.path.exists(pk.rcfile): pk.ConfigureFromFile()
