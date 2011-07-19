@@ -2926,25 +2926,26 @@ class UnknownConn(MagicProtocolParser):
         # better luck on the next round.
         return True
 
-    if domains:
-      # If we know how to terminate the TLS/SSL, do so!
-      ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
-      if ctx:
-        self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
-        self.peeking = False
-        self.is_tls = False
-        return True
-
     if domains and domains[0] is not None:
-      self.EatPeeked()
       if UserConn.FrontEnd(self, self.address,
                            'https', domains[0], self.on_port,
-                           [data], self.conns) is None:
-        return False
+                           [data], self.conns) is not None:
+        # We are done!
+        self.EatPeeked()
+        self.Cleanup(close=False)
+        return True
+      else:
+        # If we know how to terminate the TLS/SSL, do so!
+        ctx = self.conns.config.GetTlsEndpointCtx(domains[0])
+        if ctx:
+          self.fd = SSL_Connect(ctx, self.fd, accepted=True, server_side=True)
+          self.peeking = False
+          self.is_tls = False
+          return True
+        else:
+          return False
 
-    # We are done!
-    self.Cleanup(close=False)
-    return True
+    return False
 
   def ProcessRaw(self, data, domain):
     if UserConn.FrontEnd(self, self.address,
