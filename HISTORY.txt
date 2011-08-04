@@ -5,6 +5,7 @@ v0.3.22  ??
 -------
    - Added broader support for HTTP CONNECT to backends (for ad-hoc TLS)
    - Added support for finger and http-finger (for thimbl.net)
+   - Fixed bug in Listener where harmless errors would close incoming ports.
 
 
 v0.3.21  2011.05.26
