@@ -91,9 +91,10 @@ def LogError(msg, parms=None):
     common.gYamon.vadd('errors', 1, wrap=1000000)
 
 def LogDebug(msg, parms=None):
-  emsg = [('debug', msg)]
-  if parms: emsg.extend(parms)
-  Log(emsg)
+  pass
+  #emsg = [('debug', msg)]
+  #if parms: emsg.extend(parms)
+  #Log(emsg)
 
 def LogInfo(msg, parms=None):
   emsg = [('info', msg)]
