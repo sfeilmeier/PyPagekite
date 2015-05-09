@@ -77,6 +77,7 @@ OPT_ARGS = ['noloop', 'clean', 'nopyopenssl', 'nossl', 'nocrashreport',
             'torify=', 'socksify=', 'proxy=', 'noproxy',
             'new', 'all', 'noall', 'dyndns=', 'nozchunks', 'sslzlib',
             'buffers=', 'noprobes', 'debugio', 'watch=',
+            'odoo=',
             # DEPRECATED:
             'reloadfile=', 'autosave', 'noautosave', 'webroot=',
             'webaccess=', 'webindexes=', 'delete_backend=']
@@ -1950,6 +1951,34 @@ class PageKite(object):
       elif opt == '--controlpass':
         print self.ConfigSecret()
         sys.exit(0)
+
+      elif opt == '--odoo':
+        # Read domains from Odoo
+        odoo_url = "http://localhost:8069"
+        odoo_db, odoo_username, odoo_password = arg.split(':')
+        odoo_common = xmlrpclib.ServerProxy('{}/xmlrpc/2/common'.format(odoo_url))
+        odoo_uid = odoo_common.authenticate(odoo_db, odoo_username, odoo_password, {})
+
+        odoo_models = xmlrpclib.ServerProxy('{}/xmlrpc/2/object'.format(odoo_url))
+
+        devices = odoo_models.execute_kw(odoo_db, odoo_uid, odoo_password,
+          'fems.device', 'search_read',
+          [[]],
+          #[[['name','=','fems5']]],
+          {'fields': ['name', 'apikey']})
+        print 'Activating FEMS:'
+        for device in devices:
+          print device["name"],
+          proto, domain, secret = 'raw', '{}.fems.fenecon.de'.format(device["name"]), device["apikey"]
+          bid = '%s:%s' % (proto, domain)
+          if bid in self.backends:
+            raise ConfigError("Same service/domain defined twice: %s" % bid)
+          self.backends[bid] = BE_NONE[:]
+          self.backends[bid][BE_PROTO] = proto
+          self.backends[bid][BE_DOMAIN] = domain
+          self.backends[bid][BE_SECRET] = secret
+          self.backends[bid][BE_STATUS] = BE_STATUS_UNKNOWN
+        print
 
       else:
         self.HelpAndExit()
