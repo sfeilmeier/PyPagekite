@@ -1963,8 +1963,7 @@ class PageKite(object):
 
         devices = odoo_models.execute_kw(odoo_db, odoo_uid, odoo_password,
           'fems.device', 'search_read',
-          [[]],
-          #[[['name','=','fems5']]],
+          [['|',('modbustype','=','openEMS'),('is_demo','=',False)]],
           {'fields': ['name', 'apikey']})
         print 'Activating FEMS:'
         for device in devices:
